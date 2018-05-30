@@ -1,0 +1,3 @@
+public enum SymbolType {
+    ST_TERMINAL, ST_NON_TERMINAL, ST_START, ST_UNIVERSAL
+}
