@@ -1,3 +1,8 @@
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import py4j.GatewayServer;
+
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
@@ -12,9 +17,9 @@ public class Cyk {
     static ProbabilityArray probabilityArray;
     static Grammar grammar = new Grammar();
 
-    static ExecutorService executors = Executors.newFixedThreadPool(NUM_OF_THREADS);
+    static ExecutorService executors;
 
-    static void prepareJobs(int sentenceLength) {
+    void prepareJobs(int sentenceLength) {
         for (int i = 1; i < sentenceLength; i++) {
             for (int j = 0; j < sentenceLength - i; j++) {
                 jobs.add(rulesTable.get(i, j));
@@ -67,10 +72,10 @@ public class Cyk {
         }
     }
 
-    private static void initFirstRow(String sentence) {
+    static void initFirstRow(String sentence) {
         char[] chars = sentence.toCharArray();
         for (int i = 0; i < sentence.length(); i++) {
-            for (Rule rule: grammar.rules) {
+            for (Rule rule : grammar.rules) {
                 if (rule.right1.value == chars[i]) {
                     rulesTable.table[0][i].rules.add(rule);
                     probabilityArray.table[0][i][rule.left.index] = new ProbabilityCell(rule.probability, rule.probability);
@@ -81,7 +86,7 @@ public class Cyk {
 
     }
 
-    private static ProbabilityCell calculateProbability(ProbabilityCell currentCell, ProbabilityCell parent1, ProbabilityCell parent2, Rule rule) {
+    static ProbabilityCell calculateProbability(ProbabilityCell currentCell, ProbabilityCell parent1, ProbabilityCell parent2, Rule rule) {
         ProbabilityCell newProbabilityCell = new ProbabilityCell();
         if (currentCell.equals(ProbabilityCell.EMPTY_CELL)) {
             newProbabilityCell.item1 = rule.probability * parent1.item1 * parent2.item1;
@@ -93,26 +98,28 @@ public class Cyk {
         return newProbabilityCell;
     }
 
-    public static void main(String ...args) throws InterruptedException, ExecutionException {
-        String testSentence = "abababababababababababababababababababababababababababababababababababababababababababababababababababababababab";
+    public String runCyk(String testSentence, String jsonFile) {
+        // String testSentence = "abababababababababababababababababababababababababababababababababababababababababababababababababababababababab";
         // String testSentence = "fdfadbfaeeccfbeafdbaabecaeabecaeabdebfaeffcffaebeeafbeaabefaeafdbdeaebabefcaefc";
 
-
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            grammar = mapper.readValue(jsonFile, Grammar.class);
+        } catch (IOException e) {
+            System.out.println("Ups " + e.getMessage());
+            return null;
+        }
         // Grammar values generation
-        Symbol[] terminals = GrammarGenerator.generateTerminalSymbols();
-        Symbol[] nonTerminals = GrammarGenerator.generateNonTerminalSymbols();
-        List<Rule> nonTerminalRules = GrammarGenerator.generateRulesFromSymbols(nonTerminals, 100);
-        List<Rule> terminalRules = GrammarGenerator.generateTerminalRules(terminals, nonTerminals);
-        List<Rule> rules = new ArrayList<>(nonTerminalRules);
-        rules.addAll(terminalRules);
+        executors = Executors.newFixedThreadPool(NUM_OF_THREADS);
+
+        List<Rule> rules = new ArrayList<>(grammar.nonTerminalRules);
+        rules.addAll(grammar.terminalRules);
         grammar.rules = rules;
-        grammar.nonTerminalSymbols = nonTerminals;
-        grammar.terminalSymbols = terminals;
 
         // CYK parsing
         long startTime = System.currentTimeMillis();
         rulesTable = new RulesTable(testSentence.length());
-        probabilityArray = new ProbabilityArray(testSentence.length(), nonTerminals.length);
+        probabilityArray = new ProbabilityArray(testSentence.length(), grammar.nonTerminalSymbols.length);
         initFirstRow(testSentence);
         prepareJobs(testSentence.length());
 
@@ -120,20 +127,43 @@ public class Cyk {
         for (int i = 0; i < NUM_OF_THREADS; i++) {
             todo.add(Cyk::parseSentence);
         }
-        List<Future<Object>> status = executors.invokeAll(todo);
+        try {
+            List<Future<Object>> status = executors.invokeAll(todo);
 
-        for (Future<Object> s: status) {
-            s.get();
+            for (Future<Object> s : status) {
+                s.get();
+            }
+        } catch (Exception e) {
+            System.out.println("Exception occured: " + e.getMessage());
+            executors.shutdownNow();
+            return null;
         }
         executors.shutdown();
 
         long endTime = System.currentTimeMillis();
         long milis = endTime - startTime;
-        System.out.println(milis);
         long seconds = TimeUnit.MILLISECONDS.toSeconds(milis);
         milis = milis - seconds * 1000;
 
+        String rulesTableJson = "";
+        String probabilityTableJson = "";
+        try {
+            rulesTableJson = mapper.writeValueAsString(rulesTable.table);
+            probabilityTableJson = mapper.writeValueAsString(probabilityArray.table);
+            System.out.println(rulesTableJson);
+            System.out.println(probabilityTableJson);
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+
         System.out.println("s: " + seconds + " + ms:" + milis);
+        return "{ \"rules_table\": " + rulesTableJson + ", \"probability_table\": " + probabilityTableJson + "}";
+    }
+
+    public static void main(String... args) {
+        Cyk app = new Cyk();
+        GatewayServer server = new GatewayServer(app);
+        server.start();
     }
 
 }

@@ -1,11 +1,19 @@
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public class Symbol {
+
+    @JsonProperty
     char value;
-    SymbolType symbolType;
+
+    @JsonProperty
     int index;
 
-    Symbol(char value, SymbolType symbolType, int index) {
+    Symbol() {
+
+    }
+
+    Symbol(char value, int index) {
         this.value = value;
-        this.symbolType = symbolType;
         this.index = index;
     }
 
