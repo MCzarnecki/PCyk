@@ -1,33 +1,33 @@
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-
+@Data
 public class CellRule {
 
-    volatile AtomicBoolean evaluated = new AtomicBoolean(false);
-    volatile String coordinates;
+    @JsonProperty
+    private Rule rule;
 
     @JsonProperty
-    volatile List<Rule> rules = new ArrayList<>();
+    private Coordinate cell1Coordinates;
 
-    volatile int xCor;
-    volatile int yCor;
+    @JsonProperty
+    private Coordinate cell2Coordinates;
 
-    boolean isNull;
+    @JsonProperty
+    private Coordinate rootCellCoordinates;
 
-    CellRule(String coordinates, boolean isNull) {
-        this.coordinates = coordinates;
-        this.isNull = isNull;
+    public CellRule() {
+
     }
 
-    @Override
-    public String toString() {
-        StringBuilder value = new StringBuilder();
-        for (Rule rule: rules) {
-            value.append(rule.toString()).append("\n");
-        }
-        return value.toString();
+    public CellRule(Rule rule) {
+        this.rule = rule;
     }
+
+    public CellRule(Rule rule, Coordinate c1, Coordinate c2) {
+        this.rule = rule;
+        this.cell1Coordinates = c1;
+        this.cell2Coordinates = c2;
+    }
+
 }

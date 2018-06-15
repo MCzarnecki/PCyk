@@ -1,13 +1,13 @@
 public class RulesTable {
 
-    volatile CellRule[][] table;
+    volatile TableCell[][] table;
 
     RulesTable(int size) {
-        table = new CellRule[size][size];
+        table = new TableCell[size][size];
 
         for (int i = 0; i < size; i++) {
             for (int j = 0; j < size - i; j++) {
-                table[i][j] = new CellRule(String.valueOf(i) + String.valueOf(j), false);
+                table[i][j] = new TableCell(String.valueOf(i) + String.valueOf(j), false);
                 table[i][j].xCor = i;
                 table[i][j].yCor = j;
             }
@@ -15,7 +15,7 @@ public class RulesTable {
 
     }
 
-    CellRule get(int i, int j) {
+    TableCell get(int i, int j) {
         return table[i][j];
     }
 

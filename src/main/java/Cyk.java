@@ -11,7 +11,8 @@ public class Cyk {
 
     private static final int NUM_OF_THREADS = 4;
 
-    static ConcurrentLinkedQueue<CellRule> jobs = new ConcurrentLinkedQueue<>();
+    static ConcurrentLinkedQueue<TableCell> jobs = new ConcurrentLinkedQueue<>();
+    static ConcurrentLinkedQueue<RuleToAdd> rulesToAdd = new ConcurrentLinkedQueue<>();
 
     static RulesTable rulesTable;
     static ProbabilityArray probabilityArray;
@@ -30,14 +31,16 @@ public class Cyk {
     static boolean parseSentence() {
 
         while (true) {
-            CellRule cellToAnalyse = jobs.poll();
+            TableCell cellToAnalyse = jobs.poll();
 
             if (cellToAnalyse == null) {
                 return true;
             }
 
-            int i = cellToAnalyse.xCor;
-            int j = cellToAnalyse.yCor;
+            int j = cellToAnalyse.xCor;
+            int i = cellToAnalyse.yCor;
+
+            boolean added = false;
 
             for (int k = 0; k < i; k++) {
 
@@ -51,6 +54,7 @@ public class Cyk {
                         && !rulesTable.table[parentTwoI][parentTwoJ].evaluated.get()) {
                 }
 
+
                 for (Rule rule : grammar.rules) {
                     if (rule.right2 != null) {
                         int rule1index = rule.right1.index;
@@ -63,9 +67,21 @@ public class Cyk {
                             ProbabilityCell parentCellProbability = probabilityArray.table[parentOneI][parentOneJ][rule1index];
                             ProbabilityCell parent2CellProbability = probabilityArray.table[parentTwoI][parentTwoJ][rule2index];
                             probabilityArray.table[i][j][rule.left.index] = calculateProbability(currentCell, parentCellProbability, parent2CellProbability, rule);
-                            rulesTable.table[i][j].rules.add(rule);
+                            rulesTable.table[i][j].rules.add(new CellRule(rule, new Coordinate(k, j), new Coordinate(i - k - 1, j + k + 1)));
+
+                            if (!rulesTable.table[i][j].ruleFound.get()) {
+                                rulesTable.table[i][j].ruleFound.compareAndSet(false, true);
+                            }
                         }
                     }
+                }
+
+                if (!rulesTable.table[i][j].ruleFound.get() &&
+                        rulesTable.table[k][j].ruleFound.get() &&
+                        rulesTable.table[parentTwoI][parentTwoJ].ruleFound.get()) {
+                    System.out.println(i + " " + j);
+                    rulesToAdd.add(new RuleToAdd(i, j));
+                    rulesTable.table[i][j].ruleFound.compareAndSet(false, true);
                 }
             }
             rulesTable.table[i][j].evaluated.compareAndSet(false, true);
@@ -77,11 +93,12 @@ public class Cyk {
         for (int i = 0; i < sentence.length(); i++) {
             for (Rule rule : grammar.rules) {
                 if (rule.right1.value == chars[i]) {
-                    rulesTable.table[0][i].rules.add(rule);
+                    rulesTable.table[0][i].rules.add(new CellRule(rule));
                     probabilityArray.table[0][i][rule.left.index] = new ProbabilityCell(rule.probability, rule.probability);
                 }
             }
             rulesTable.table[0][i].evaluated.compareAndSet(false, true);
+            rulesTable.table[0][i].ruleFound.compareAndSet(false, true);
         }
 
     }
@@ -89,16 +106,17 @@ public class Cyk {
     static ProbabilityCell calculateProbability(ProbabilityCell currentCell, ProbabilityCell parent1, ProbabilityCell parent2, Rule rule) {
         ProbabilityCell newProbabilityCell = new ProbabilityCell();
         if (currentCell.equals(ProbabilityCell.EMPTY_CELL)) {
-            newProbabilityCell.item1 = rule.probability * parent1.item1 * parent2.item1;
-            newProbabilityCell.item2 = rule.probability * parent1.item2 * parent2.item2;
+            newProbabilityCell.item_1 = rule.probability * parent1.item_1 * parent2.item_1;
+            newProbabilityCell.item_2 = rule.probability * parent1.item_2 * parent2.item_2;
         } else {
-            newProbabilityCell.item1 = currentCell.item1 + (rule.probability * parent1.item1 * parent2.item2);
-            newProbabilityCell.item2 = currentCell.item2 + (rule.probability * parent2.item2 * parent2.item2);
+            newProbabilityCell.item_1 = currentCell.item_1 + (rule.probability * parent1.item_1 * parent2.item_2);
+            newProbabilityCell.item_2 = currentCell.item_2 + (rule.probability * parent2.item_2 * parent2.item_2);
         }
         return newProbabilityCell;
     }
 
     public String runCyk(String testSentence, String jsonFile) {
+        System.out.println(testSentence);
         // String testSentence = "abababababababababababababababababababababababababababababababababababababababababababababababababababababababab";
         // String testSentence = "fdfadbfaeeccfbeafdbaabecaeabecaeabdebfaeffcffaebeeafbeaabefaeafdbdeaebabefcaefc";
 
@@ -147,17 +165,18 @@ public class Cyk {
 
         String rulesTableJson = "";
         String probabilityTableJson = "";
+        String rulesToAddStr = "";
         try {
             rulesTableJson = mapper.writeValueAsString(rulesTable.table);
             probabilityTableJson = mapper.writeValueAsString(probabilityArray.table);
-            System.out.println(rulesTableJson);
-            System.out.println(probabilityTableJson);
+            rulesToAddStr = mapper.writeValueAsString(rulesToAdd);
         } catch (JsonProcessingException e) {
             e.printStackTrace();
         }
 
         System.out.println("s: " + seconds + " + ms:" + milis);
-        return "{ \"rules_table\": " + rulesTableJson + ", \"probability_table\": " + probabilityTableJson + "}";
+        rulesToAdd.clear();
+        return "{ \"rules_table\": " + rulesTableJson + ", \"probability_table\": " + probabilityTableJson + ", \"rules_to_add\": " + rulesToAddStr + "}";
     }
 
     public static void main(String... args) {
